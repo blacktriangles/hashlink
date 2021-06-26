@@ -1,21 +1,74 @@
-cmake_minimum_required(VERSION 3.1)
+#
+# (c) LetsMakeGames 2021
+# http://www.letsmake.games
+#
 
+cmake_minimum_required(VERSION 3.15)
+cmake_policy(SET CMP0091 NEW) # Allows setting MSVC_RUNTIME_LIBRARY
+cmake_policy(SET CMP0042 NEW)
+
+#
+# project configuration #######################################################
+#
+
+set(PROJECT_NAME HashLink)
 set(HL_VERSION_MAJOR 1)
 set(HL_VERSION_MINOR 12)
 set(HL_VERSION_PATCH 0)
 set(HL_VERSION ${HL_VERSION_MAJOR}.${HL_VERSION_MINOR}.${HL_VERSION_PATCH})
 
-cmake_policy(SET CMP0042 NEW)
+project(${PROJECT_NAME}
+    VERSION ${HL_VERSION}
+        LANGUAGES C CXX
+)
 
-if(WIN32)
-    project(hashlink C CXX) # C++ required for directx
+if(BT_TESTING)
+    set(BUILD_TESTS_DEFAULT ON)
 else()
-    project(hashlink C)
+    set(BUILD_TESTS_DEFAULT OFF)
 endif()
+
+option(BUILD_TESTS "Build the tests" ${BUILD_TESTS_DEFAULT})
+if(BUILD_TESTS)
+    enable_testing()
+endif()
+
+set(BT_CXX_VERSION 17)
+
+#
+# includes ####################################################################
+#
+
+if(NOT BT_CMAKE_DIR)
+    set(BT_CMAKE_DIR ${CMAKE_CURRENT_LIST_DIR}/extern/cmake-utils CACHE STRING "The top level cmake utilities directory")
+endif()
+
+# a collection of add_library add_executable and add_test macros to make adding
+# targets easier
+include("${BT_CMAKE_DIR}/TargetMacros.cmake")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/bin/${BT_PLATFORM}/${BT_BUILD_TYPE}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/bin/${BT_PLATFORM}/${BT_BUILD_TYPE}")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/bin/${BT_PLATFORM}/${BT_BUILD_TYPE}")
+
+# because windows is a bum
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}")
+
+#
+# more includes
+#
 
 include(GNUInstallDirs)
 include(FindPkgConfig)
 include(CTest)
+
+#
+# settings ####################################################################
+#
 
 # force Unicode over Multi-byte
 if(MSVC)
@@ -33,30 +86,21 @@ else()
     set(CMAKE_C_STANDARD_REQUIRED ON)
 endif()
 
-# put output in "bin"
+#
+# add dependencies ############################################################
+#
 
-set(OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OUTPUT_DIR})
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR})
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR})
+add_subdirectory(extern)
+add_subdirectory(libs)
 
-# avoid the extra "Debug", "Release" directories
-foreach( OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES} )
-    string( TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG )
-    set( CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${OUTPUT_DIR} )
-    set( CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${OUTPUT_DIR} )
-    set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${OUTPUT_DIR} )
-endforeach()
-
-include_directories(
-    src
-    include
-    include/pcre
-)
+#
+# libhl #######################################################################
+#
 
 file(GLOB pcre_srcs
     include/pcre/*.c
 )
+
 file(GLOB std_srcs
     src/std/array.c
     src/std/buffer.c
@@ -107,14 +151,14 @@ add_library(libhl SHARED
     ${std_srcs}
 )
 
-set(public_headers
-    src/hl.h
-    src/hlc.h
+target_include_directories(libhl PUBLIC
+        src
+        include
+        include/pcre
 )
 
-set_target_properties(libhl
-    PROPERTIES
-    PUBLIC_HEADER "${public_headers}"
+target_link_libraries(libhl
+        OpenAL
 )
 
 if(WIN32)
@@ -136,13 +180,17 @@ set_target_properties(libhl
     COMPILE_DEFINITIONS "_USRDLL;LIBHL_EXPORTS"
 )
 
-add_executable(hl
+#
+# executable ##################################################################
+#
+
+add_executable(hl 
     src/code.c
     src/jit.c
     src/main.c
     src/module.c
     src/debugger.c
-	src/profile.c
+    src/profile.c
 )
 
 target_link_libraries(hl libhl)
@@ -153,211 +201,3 @@ if(WIN32)
 else()
     target_link_libraries(libhl m dl pthread)
 endif()
-
-if(BUILD_TESTING)
-
-    find_program(
-        HAXE_COMPILER
-        haxe
-    )
-
-    #####################
-    # hello.hl
-
-    add_custom_command(OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/hello.hl
-        COMMAND ${HAXE_COMPILER}
-            -hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/hello.hl
-            -cp ${CMAKE_SOURCE_DIR}/other/tests -main HelloWorld
-    )
-    add_custom_target(hello.hl ALL
-        DEPENDS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/hello.hl
-    )
-
-    #####################
-    # threads.hl
-
-    add_custom_command(OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/threads.hl
-        COMMAND ${HAXE_COMPILER}
-            -hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/threads.hl
-            -cp ${CMAKE_SOURCE_DIR}/other/tests -main Threads
-    )
-    add_custom_target(threads.hl ALL
-        DEPENDS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/threads.hl
-    )
-
-    #####################
-    # uvsample.hl
-
-    add_custom_command(OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/uvsample.hl
-        COMMAND ${HAXE_COMPILER}
-            -hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/uvsample.hl
-            -cp ${CMAKE_SOURCE_DIR}/other/uvsample -main UVSample
-    )
-    add_custom_target(uvsample.hl ALL
-        DEPENDS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/uvsample.hl
-    )
-
-    #####################
-    # hello.c
-
-    add_custom_command(OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/hello/hello.c
-        COMMAND ${HAXE_COMPILER}
-            -hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/hello/hello.c
-            -cp ${CMAKE_SOURCE_DIR}/other/tests -main HelloWorld
-    )
-    add_executable(hello
-        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/hello/hello.c
-    )
-    set_target_properties(hello
-        PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/hello
-    )
-    target_include_directories(hello
-        PRIVATE ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/hello
-    )
-    target_link_libraries(hello
-        libhl
-    )
-
-    #####################
-    # threads.c
-
-    add_custom_command(OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/threads/threads.c
-        COMMAND ${HAXE_COMPILER}
-            -hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/threads/threads.c
-            -cp ${CMAKE_SOURCE_DIR}/other/tests -main Threads
-    )
-    add_executable(threads
-        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/threads/threads.c
-    )
-    set_target_properties(threads
-        PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/threads
-    )
-    target_include_directories(threads
-        PRIVATE ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/threads
-    )
-    target_link_libraries(threads
-        libhl
-    )
-
-    #####################
-    # uvsample.c
-
-    add_custom_command(OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/uvsample/uvsample.c
-        COMMAND ${HAXE_COMPILER}
-            -hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/uvsample/uvsample.c
-            -cp ${CMAKE_SOURCE_DIR}/other/uvsample -main UVSample
-    )
-    add_executable(uvsample
-        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/uvsample/uvsample.c
-    )
-    set_target_properties(uvsample
-        PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/uvsample
-    )
-    target_include_directories(uvsample
-        PRIVATE ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/uvsample
-    )
-    target_link_libraries(uvsample
-        libhl
-        uv.hdll
-    )
-
-    #####################
-    # Tests
-
-    add_test(NAME hello.hl
-        COMMAND hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/hello.hl
-    )
-    add_test(NAME threads.hl
-        COMMAND hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/threads.hl
-    )
-    add_test(NAME uvsample.hl
-        COMMAND hl ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test/uvsample.hl
-    )
-    add_test(NAME hello
-        COMMAND hello
-    )
-    add_test(NAME threads
-        COMMAND threads
-    )
-    add_test(NAME uvsample
-        COMMAND uvsample
-    )
-    add_test(NAME version
-        COMMAND hl --version
-    )
-    set_tests_properties(version
-        PROPERTIES
-        PASS_REGULAR_EXPRESSION "${HL_VERSION}"
-    )
-
-endif()
-
-#####################
-# Packaging
-
-set(CPACK_OUTPUT_FILE_PREFIX ${OUTPUT_DIR})
-
-set(CPACK_PACKAGE_VENDOR "Haxe Foundation")
-set(CPACK_PACKAGE_VERSION_MAJOR ${HL_VERSION_MAJOR})
-set(CPACK_PACKAGE_VERSION_MINOR ${HL_VERSION_MINOR})
-set(CPACK_PACKAGE_VERSION_PATCH ${HL_VERSION_PATCH})
-
-if(WIN32)
-    set(CPACK_GENERATOR "ZIP")
-else()
-    set(CPACK_GENERATOR "TGZ")
-endif()
-
-set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-
-set(HDLL_DESTINATION
-    ${CMAKE_INSTALL_LIBDIR}
-)
-
-install(
-    TARGETS
-        hl
-        libhl
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
-
-# uninstall target
-# https://gitlab.kitware.com/cmake/community/wikis/FAQ#can-i-do-make-uninstall-with-cmake
-if(NOT TARGET uninstall)
-    configure_file(
-        "${CMAKE_CURRENT_SOURCE_DIR}/other/cmake/cmake_uninstall.cmake.in"
-        "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
-        IMMEDIATE @ONLY)
-
-    add_custom_target(uninstall
-        COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
-endif()
-
-
-if(
-    NOT DEFINED ENV{APPVEYOR_REPO_TAG_NAME}
-    AND
-    DEFINED ENV{APPVEYOR_REPO_COMMIT}
-)
-    string(SUBSTRING $ENV{APPVEYOR_REPO_COMMIT} 0 7 short_commit)
-endif()
-
-if(NOT DEFINED ENV{TRAVIS_TAG} AND DEFINED ENV{TRAVIS_COMMIT})
-    string(SUBSTRING $ENV{TRAVIS_COMMIT} 0 7 short_commit)
-endif()
-
-if(DEFINED short_commit)
-    set(CPACK_PACKAGE_VERSION "${HL_VERSION}+${short_commit}")
-endif()
-
-
-include(CPack)
-
-add_subdirectory(libs)

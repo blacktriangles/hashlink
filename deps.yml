@@ -1,0 +1,14 @@
+dependencies:
+  cmake-utils:
+    pushable: true
+    repo: https://gitlab.com/letsmakegames/modules/cpp/cmake
+  openal:
+    repo: https://github.com/kcat/openal-soft
+    tag: 1.21.1
+  sdl2:
+    repo: https://github.com/libsdl-org/SDL
+    tag: release-2.0.14
+
+project:
+  installDir: extern
+  patchDir: patches

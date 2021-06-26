@@ -1,21 +1,19 @@
-if(WIN32)
-    set(SDL2_PATH ${INCLUDES_BASE_DIR}/sdl)
-endif()
-find_package(SDL2 REQUIRED)
 
 add_library(sdl.hdll SHARED
     sdl.c
     gl.c
 )
+
 set_as_hdll(sdl)
+
 target_include_directories(sdl.hdll
     PRIVATE
-    ${SDL2_INCLUDE_DIR}
     ${INCLUDES_BASE_DIR}/gl
 )
+
 target_link_libraries(sdl.hdll
     libhl
-    ${SDL2_LIBRARY}
+    SDL2
 )
 
 if(WIN32)
